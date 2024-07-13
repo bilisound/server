@@ -1,9 +1,7 @@
 package utils
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/bilisound/server/internal/config"
 	"github.com/bilisound/server/internal/structure"
 	"github.com/buger/jsonparser"
@@ -38,7 +36,7 @@ func ExtractContent(regex *regexp.Regexp, str string, options ExtractJSONOptions
 
 func getVideo(html string) (string, string, error) {
 	initialStateRegex := regexp.MustCompile(`window\.__INITIAL_STATE__=(\{.+});`)
-	playInfoRegex := regexp.MustCompile(`window\.__playinfo__=(\{.+})<\/script><script>`)
+	playInfoRegex := regexp.MustCompile(`window\.__playinfo__=(\{.+})</script><script>`)
 
 	initialState, err := ExtractContent(initialStateRegex, html, ExtractJSONOptions{})
 	if err != nil {
@@ -53,54 +51,30 @@ func getVideo(html string) (string, string, error) {
 	return initialState, playInfo, nil
 }
 
-func ParseVideo() error {
+func ParseVideo(id string) (*structure.Video, error) {
 	// Create a Resty Client
 	client := resty.New()
 
 	resp, err := client.R().
 		EnableTrace().
 		SetHeader("User-Agent", config.Global.MustString("request.userAgent")).
-		Get("https://www.bilibili.com/video/BV16D4y1b7P7/")
+		Get("https://www.bilibili.com/video/" + id + "/")
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	result, err := ParseHTML(resp.String())
-	marshal, err := json.Marshal(result)
-
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf(string(marshal))
-
-	return err
+	result, err := ParseHTMLRegular(resp.String())
+	return result, err
 }
 
-func ParseHTML(html string) (*structure.Video, error) {
+func ParseHTMLRegular(html string) (*structure.Video, error) {
 	initialState, _, err := getVideo(html)
 	if err != nil {
 		return nil, err
 	}
 
-	//bvid, err := jsonparser.GetString([]byte(initialState), "videoData", "bvid")
-	//fmt.Println("bvid:", bvid)
-
 	video := structure.Video{}
-
-	/*
-		bvid: videoData.bvid,
-		aid: videoData.aid,
-		title: videoData.title,
-		pic: videoData.pic,
-		owner: videoData.owner,
-		desc: (videoData?.desc_v2 ?? []).map(e => e.raw_text).join("\n"),
-		pubDate: videoData.pubdate * 1000,
-		pages: pages.map(({ page, part, duration }) => ({ page, part, duration })),
-		seasonId: videoData.season_id,
-	*/
-
 	paths := [][]string{
 		{"videoData", "bvid"},
 		{"videoData", "aid"},
@@ -114,6 +88,7 @@ func ParseHTML(html string) (*structure.Video, error) {
 		{"videoData", "pages"},
 		{"videoData", "season_id"},
 	}
+
 	jsonparser.EachKey([]byte(initialState), func(idx int, value []byte, vt jsonparser.ValueType, err error) {
 		switch idx {
 		case 0:

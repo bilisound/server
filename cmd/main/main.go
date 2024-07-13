@@ -1,13 +1,7 @@
 package main
 
-import (
-	"github.com/bilisound/server/internal/utils"
-	"log"
-)
+import "github.com/bilisound/server/internal/server"
 
 func main() {
-	err := utils.ParseVideo()
-	if err != nil {
-		log.Fatal(err)
-	}
+	server.Start()
 }
