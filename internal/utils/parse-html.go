@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/bilisound/server/internal/config"
@@ -65,14 +66,22 @@ func ParseVideo() error {
 		return err
 	}
 
-	err = ParseHTML(resp.String())
+	result, err := ParseHTML(resp.String())
+	marshal, err := json.Marshal(result)
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf(string(marshal))
+
 	return err
 }
 
-func ParseHTML(html string) error {
+func ParseHTML(html string) (*structure.Video, error) {
 	initialState, _, err := getVideo(html)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	//bvid, err := jsonparser.GetString([]byte(initialState), "videoData", "bvid")
@@ -80,10 +89,30 @@ func ParseHTML(html string) error {
 
 	video := structure.Video{}
 
+	/*
+		bvid: videoData.bvid,
+		aid: videoData.aid,
+		title: videoData.title,
+		pic: videoData.pic,
+		owner: videoData.owner,
+		desc: (videoData?.desc_v2 ?? []).map(e => e.raw_text).join("\n"),
+		pubDate: videoData.pubdate * 1000,
+		pages: pages.map(({ page, part, duration }) => ({ page, part, duration })),
+		seasonId: videoData.season_id,
+	*/
+
 	paths := [][]string{
 		{"videoData", "bvid"},
 		{"videoData", "aid"},
 		{"videoData", "title"},
+		{"videoData", "pic"},
+		{"videoData", "owner", "mid"},
+		{"videoData", "owner", "name"},
+		{"videoData", "owner", "face"},
+		{"videoData", "desc_v2"},
+		{"videoData", "pubdate"},
+		{"videoData", "pages"},
+		{"videoData", "season_id"},
 	}
 	jsonparser.EachKey([]byte(initialState), func(idx int, value []byte, vt jsonparser.ValueType, err error) {
 		switch idx {
@@ -96,9 +125,42 @@ func ParseHTML(html string) error {
 		case 2:
 			video.Title, err = jsonparser.ParseString(value)
 			break
+		case 3:
+			video.Pic, err = jsonparser.ParseString(value)
+			break
+		case 4:
+			video.Owner.Mid, err = jsonparser.ParseInt(value)
+			break
+		case 5:
+			video.Owner.Name, err = jsonparser.ParseString(value)
+			break
+		case 6:
+			video.Owner.Face, err = jsonparser.ParseString(value)
+			break
+		case 7:
+			_, err = jsonparser.ArrayEach(value, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
+				got, err := jsonparser.GetString(value, "raw_text")
+				video.Desc = video.Desc + "\n" + got
+			})
+			break
+		case 8:
+			video.PubDate, err = jsonparser.ParseInt(value)
+			video.PubDate = video.PubDate * 1000
+			break
+		case 9:
+			_, err = jsonparser.ArrayEach(value, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
+				videoPage := structure.VideoPage{}
+				videoPage.Page, err = jsonparser.GetInt(value, "page")
+				videoPage.Part, err = jsonparser.GetString(value, "part")
+				videoPage.Duration, err = jsonparser.GetInt(value, "duration")
+				video.Pages = append(video.Pages, videoPage)
+			})
+			break
+		case 10:
+			video.SeasonId, err = jsonparser.ParseInt(value)
+			break
 		}
 	}, paths...)
 
-	fmt.Print(video)
-	return nil
+	return &video, err
 }
