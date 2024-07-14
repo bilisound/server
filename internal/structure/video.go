@@ -14,15 +14,17 @@ type VideoPage struct {
 }
 
 type Video struct {
-	Bvid     string      `json:"bvid"`
-	Aid      int64       `json:"aid"`
-	Title    string      `json:"title"`
-	Pic      string      `json:"pic"`
-	Owner    VideoOwner  `json:"owner"`
-	Desc     string      `json:"desc"`
-	PubDate  int64       `json:"pubDate"`
-	Pages    []VideoPage `json:"pages"`
-	SeasonId int64       `json:"seasonId"`
+	Bvid        string      `json:"bvid"`
+	Aid         int64       `json:"aid"`
+	Title       string      `json:"title"`
+	Pic         string      `json:"pic"`
+	Owner       VideoOwner  `json:"owner"`
+	Desc        string      `json:"desc"`
+	PubDate     int64       `json:"pubDate"`
+	Pages       []VideoPage `json:"pages"`
+	SeasonId    int64       `json:"seasonId"`
+	ActivityKey string      `json:"activityKey"`
+	IsVideoOnly bool        `json:"isVideoOnly"`
 }
 
 type VideoPlayInfo struct {

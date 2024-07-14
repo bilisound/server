@@ -16,16 +16,13 @@ func InitRoute(engine *gin.Engine, prefix string) {
 
 func getMetadata(c *gin.Context) {
 	id := c.Query("id")
-	video, playInfo, err := api.GetVideoMeta(id)
+	video, _, err := api.GetVideoMeta(id)
 
 	if err != nil {
 		utils.AjaxError(c, 500, err)
 		return
 	}
-	utils.AjaxSuccess(c, gin.H{
-		"video":    video,
-		"playInfo": playInfo,
-	})
+	utils.AjaxSuccess(c, video)
 }
 
 func test(c *gin.Context) {

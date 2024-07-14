@@ -120,7 +120,7 @@ func parseVideoMeta(html string) (video *structure.Video, playInfo *structure.Vi
 	initialStateByte := []byte(initialState)
 
 	isFestivalVideo := true
-	_, err = jsonparser.GetString(initialStateByte, "activityKey")
+	video.ActivityKey, err = jsonparser.GetString(initialStateByte, "activityKey")
 	if err != nil {
 		isFestivalVideo = false
 		err = nil
@@ -269,6 +269,9 @@ func parseVideoMeta(html string) (video *structure.Video, playInfo *structure.Vi
 	}
 
 	parsed, err := parseVideoPlayInfo(playInfoRaw)
+	if parsed.IsVideo {
+		video.IsVideoOnly = true
+	}
 	return video, parsed, err
 }
 
