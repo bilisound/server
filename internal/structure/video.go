@@ -10,6 +10,7 @@ type VideoPage struct {
 	Page     int64  `json:"page"`
 	Part     string `json:"part"`
 	Duration int64  `json:"duration"`
+	Cid      int64  `json:"cid"`
 }
 
 type Video struct {
@@ -22,4 +23,9 @@ type Video struct {
 	PubDate  int64       `json:"pubDate"`
 	Pages    []VideoPage `json:"pages"`
 	SeasonId int64       `json:"seasonId"`
+}
+
+type VideoPlayInfo struct {
+	IsVideo bool     `json:"isVideo"`
+	Url     []string `json:"url"`
 }
