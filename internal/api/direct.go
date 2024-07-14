@@ -275,7 +275,7 @@ func parseVideoMeta(html string) (video *structure.Video, playInfo *structure.Vi
 	return video, parsed, err
 }
 
-func GetVideoMeta(id string) (video *structure.Video, playinfo *structure.VideoPlayInfo, err error) {
+func GetVideoMeta(id string, episode string) (video *structure.Video, playinfo *structure.VideoPlayInfo, err error) {
 	got, err := dao.GetCache("GetVideoMeta_" + id)
 	if err != nil {
 		return nil, nil, err
@@ -290,7 +290,7 @@ func GetVideoMeta(id string) (video *structure.Video, playinfo *structure.VideoP
 		resp, err := client.R().
 			EnableTrace().
 			SetHeader("User-Agent", config.Global.MustString("request.userAgent")).
-			Get("https://www.bilibili.com/video/" + id + "/")
+			Get("https://www.bilibili.com/video/" + id + "/?p=" + episode)
 
 		if err != nil {
 			return nil, nil, err
