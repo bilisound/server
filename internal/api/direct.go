@@ -31,9 +31,9 @@ func parseRegularVideoMeta(html string) (*structure.Video, error) {
 	//}
 
 	video := structure.Video{}
-	video.Bvid, err = jsonparser.GetString([]byte(initialState), "videoInfo", "bvid")
 
 	if isFestivalVideo {
+		video.Bvid, err = jsonparser.GetString([]byte(initialState), "videoInfo", "bvid")
 		_, err := jsonparser.ArrayEach([]byte(initialState), func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
 			bvid, err := jsonparser.GetString(value, "bvid")
 			if bvid == video.Bvid {
