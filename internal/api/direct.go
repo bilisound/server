@@ -2,10 +2,12 @@ package api
 
 import (
 	"github.com/bilisound/server/internal/config"
+	"github.com/bilisound/server/internal/dao"
 	"github.com/bilisound/server/internal/structure"
 	"github.com/bilisound/server/internal/utils"
 	"github.com/buger/jsonparser"
 	"github.com/go-resty/resty/v2"
+	"log"
 	"regexp"
 )
 
@@ -160,18 +162,34 @@ func parseRegularVideoMeta(html string) (*structure.Video, error) {
 }
 
 func GetVideoMeta(id string) (*structure.Video, error) {
-	// Create a Resty Client
-	client := resty.New()
-
-	resp, err := client.R().
-		EnableTrace().
-		SetHeader("User-Agent", config.Global.MustString("request.userAgent")).
-		Get("https://www.bilibili.com/video/" + id + "/")
-
+	got, err := dao.GetCache("GetVideoMeta_" + id)
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := parseRegularVideoMeta(resp.String())
+	// 没缓存
+	if got == "" {
+		log.Println("Cache not found, requesting from external API")
+		// Create a Resty Client
+		client := resty.New()
+
+		resp, err := client.R().
+			EnableTrace().
+			SetHeader("User-Agent", config.Global.MustString("request.userAgent")).
+			Get("https://www.bilibili.com/video/" + id + "/")
+
+		if err != nil {
+			return nil, err
+		}
+
+		got = resp.String()
+
+		err = dao.SetCache("GetVideoMeta_"+id, got)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	result, err := parseRegularVideoMeta(got)
 	return result, err
 }
