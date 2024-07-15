@@ -189,7 +189,7 @@ func parseVideoMeta(html string) (video *structure.Video, playInfo *structure.Vi
 		}
 
 		// 节日视频播放信息提取
-		playInfoRaw, err = GetVideoPlayinfo("", strconv.FormatInt(video.Aid, 10), video.Bvid, strconv.FormatInt(video.Pages[0].Cid, 10))
+		playInfoRaw, err = GetVideoPlayinfo("https://www.bilibili.com/festival/"+video.ActivityKey+"?bvid="+video.Bvid, strconv.FormatInt(video.Aid, 10), video.Bvid, strconv.FormatInt(video.Pages[0].Cid, 10))
 		if err != nil {
 			return nil, nil, err
 		}

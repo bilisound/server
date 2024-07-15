@@ -18,7 +18,6 @@ func InitRoute(engine *gin.Engine, prefix string) {
 	{
 		group.GET("/metadata", getMetadata)
 		group.GET("/resource", getResource)
-		group.GET("/test", test)
 	}
 }
 
@@ -94,7 +93,7 @@ func getResource(c *gin.Context) {
 		}
 		episodeNum, err := strconv.Atoi(episode)
 		if err != nil {
-			log.Printf("Unable to perform request: %s\n", err)
+			log.Printf("Unable to construct file name: %s\n", err)
 			c.Status(500)
 			c.Abort()
 			return
@@ -122,20 +121,11 @@ func getResource(c *gin.Context) {
 	c.Status(httpCode)
 
 	// 数据传输
-	defer resp.Body.Close()
 	_, err = io.Copy(c.Writer, resp.Body)
 	if err != nil {
-		log.Printf("Unable to perform request: %s\n", err)
+		log.Printf("Unable to transfer data: %s\n", err)
 		c.Abort()
 		return
 	}
-}
-
-func test(c *gin.Context) {
-	result, err := api.GetVideoPlayinfo("https://www.bilibili.com/video/BV1ks411D7id/", "2300875", "BV1ks411D7id", "3589854")
-	if err != nil {
-		utils.AjaxError(c, 500, err)
-		return
-	}
-	utils.AjaxJSONString(c, result)
+	log.Printf("Success transfer data")
 }
