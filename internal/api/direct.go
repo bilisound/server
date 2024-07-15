@@ -106,6 +106,74 @@ func parseVideoPlayInfo(playInfo string) (*structure.VideoPlayInfo, error) {
 	return nil, errors.New("neither dash nor durl can be found")
 }
 
+func parseVideoMetaFestival(initialStateByte []byte, video *structure.Video, playInfoRaw *string) (err error) {
+	// 节日视频元数据解析
+	video.Bvid, err = jsonparser.GetString(initialStateByte, "videoInfo", "bvid")
+	_, err = jsonparser.ArrayEach(initialStateByte, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
+		bvid, err := jsonparser.GetString(value, "bvid")
+		if bvid == video.Bvid {
+			video.Pic, err = jsonparser.GetString(value, "cover")
+			video.Owner.Name, err = jsonparser.GetString(value, "author", "name")
+			video.Owner.Face, err = jsonparser.GetString(value, "author", "face")
+			video.Owner.Mid, err = jsonparser.GetInt(value, "author", "mid")
+		}
+	}, "sectionEpisodes")
+
+	if err != nil {
+		return err
+	}
+
+	paths := [][]string{
+		{"videoInfo", "bvid"},
+		{"videoInfo", "aid"},
+		{"videoInfo", "title"},
+		{"videoInfo", "desc"},
+		{"videoInfo", "pubdate"},
+		{"videoInfo", "pages"},
+	}
+
+	jsonparser.EachKey(initialStateByte, func(idx int, value []byte, vt jsonparser.ValueType, err error) {
+		switch idx {
+		case 0:
+			video.Bvid, err = jsonparser.ParseString(value)
+			break
+		case 1:
+			video.Aid, err = jsonparser.ParseInt(value)
+			break
+		case 2:
+			video.Title, err = jsonparser.ParseString(value)
+			break
+		case 3:
+			video.Desc, err = jsonparser.ParseString(value)
+			break
+		case 4:
+			video.PubDate, err = jsonparser.ParseInt(value)
+			video.PubDate = video.PubDate * 1000
+			break
+		case 5:
+			_, err = jsonparser.ArrayEach(value, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
+				videoPage := structure.VideoPage{}
+				videoPage.Page, err = jsonparser.GetInt(value, "page")
+				videoPage.Part, err = jsonparser.GetString(value, "part")
+				videoPage.Duration, err = jsonparser.GetInt(value, "duration")
+				videoPage.Cid, err = jsonparser.GetInt(value, "cid")
+				video.Pages = append(video.Pages, videoPage)
+			})
+			break
+		}
+	}, paths...)
+	if err != nil {
+		return err
+	}
+
+	// 节日视频播放信息提取
+	*playInfoRaw, err = GetVideoPlayinfo("https://www.bilibili.com/festival/"+video.ActivityKey+"?bvid="+video.Bvid, strconv.FormatInt(video.Aid, 10), video.Bvid, strconv.FormatInt(video.Pages[0].Cid, 10))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func parseVideoMeta(html string) (video *structure.Video, playInfo *structure.VideoPlayInfo, err error) {
 	video = &structure.Video{}
 	playInfo = &structure.VideoPlayInfo{}
@@ -129,67 +197,7 @@ func parseVideoMeta(html string) (video *structure.Video, playInfo *structure.Vi
 	playInfoRaw := ""
 
 	if isFestivalVideo {
-		// 节日视频元数据解析
-		video.Bvid, err = jsonparser.GetString(initialStateByte, "videoInfo", "bvid")
-		_, err := jsonparser.ArrayEach(initialStateByte, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
-			bvid, err := jsonparser.GetString(value, "bvid")
-			if bvid == video.Bvid {
-				video.Pic, err = jsonparser.GetString(value, "cover")
-				video.Owner.Name, err = jsonparser.GetString(value, "author", "name")
-				video.Owner.Face, err = jsonparser.GetString(value, "author", "face")
-				video.Owner.Mid, err = jsonparser.GetInt(value, "author", "mid")
-			}
-		}, "sectionEpisodes")
-
-		if err != nil {
-			return nil, nil, err
-		}
-
-		paths := [][]string{
-			{"videoInfo", "bvid"},
-			{"videoInfo", "aid"},
-			{"videoInfo", "title"},
-			{"videoInfo", "desc"},
-			{"videoInfo", "pubdate"},
-			{"videoInfo", "pages"},
-		}
-
-		jsonparser.EachKey(initialStateByte, func(idx int, value []byte, vt jsonparser.ValueType, err error) {
-			switch idx {
-			case 0:
-				video.Bvid, err = jsonparser.ParseString(value)
-				break
-			case 1:
-				video.Aid, err = jsonparser.ParseInt(value)
-				break
-			case 2:
-				video.Title, err = jsonparser.ParseString(value)
-				break
-			case 3:
-				video.Desc, err = jsonparser.ParseString(value)
-				break
-			case 4:
-				video.PubDate, err = jsonparser.ParseInt(value)
-				video.PubDate = video.PubDate * 1000
-				break
-			case 5:
-				_, err = jsonparser.ArrayEach(value, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
-					videoPage := structure.VideoPage{}
-					videoPage.Page, err = jsonparser.GetInt(value, "page")
-					videoPage.Part, err = jsonparser.GetString(value, "part")
-					videoPage.Duration, err = jsonparser.GetInt(value, "duration")
-					videoPage.Cid, err = jsonparser.GetInt(value, "cid")
-					video.Pages = append(video.Pages, videoPage)
-				})
-				break
-			}
-		}, paths...)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		// 节日视频播放信息提取
-		playInfoRaw, err = GetVideoPlayinfo("https://www.bilibili.com/festival/"+video.ActivityKey+"?bvid="+video.Bvid, strconv.FormatInt(video.Aid, 10), video.Bvid, strconv.FormatInt(video.Pages[0].Cid, 10))
+		err := parseVideoMetaFestival(initialStateByte, video, &playInfoRaw)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -276,7 +284,8 @@ func parseVideoMeta(html string) (video *structure.Video, playInfo *structure.Vi
 }
 
 func GetVideoMeta(id string, episode string) (video *structure.Video, playinfo *structure.VideoPlayInfo, err error) {
-	got, err := dao.GetCache("GetVideoMeta_" + id)
+	cacheName := "GetVideoMeta_" + id + "_" + episode
+	got, err := dao.GetCache(cacheName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -298,7 +307,7 @@ func GetVideoMeta(id string, episode string) (video *structure.Video, playinfo *
 
 		got = resp.String()
 
-		err = dao.SetCache("GetVideoMeta_"+id, got)
+		err = dao.SetCache(cacheName, got)
 		if err != nil {
 			return nil, nil, err
 		}
