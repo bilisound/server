@@ -316,3 +316,15 @@ func GetVideoMeta(id string, episode string) (video *structure.Video, playinfo *
 	video, playInfo, err := parseVideoMeta(got)
 	return video, playInfo, err
 }
+
+func GetRedirectTarget(url string) (target string, err error) {
+	res, err := resty.New().
+		R().
+		SetHeader("User-Agent", config.Global.MustString("request.userAgent")).
+		Get(url)
+	if err != nil {
+		return "", err
+	}
+
+	return res.RawResponse.Request.URL.String(), nil
+}

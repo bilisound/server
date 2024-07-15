@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"errors"
 	"fmt"
 	"github.com/bilisound/server/internal/api"
 	"github.com/bilisound/server/internal/config"
@@ -18,6 +19,8 @@ func InitRoute(engine *gin.Engine, prefix string) {
 	{
 		group.GET("/metadata", getMetadata)
 		group.GET("/resource", getResource)
+		group.GET("/resolve", getResolve)
+		group.GET("/image", getImage)
 	}
 }
 
@@ -119,6 +122,81 @@ func getResource(c *gin.Context) {
 	}
 
 	c.Status(httpCode)
+
+	// 数据传输
+	_, err = io.Copy(c.Writer, resp.Body)
+	if err != nil {
+		log.Printf("Unable to transfer data: %s\n", err)
+		c.Abort()
+		return
+	}
+	log.Printf("Success transfer data")
+}
+
+func getResolve(c *gin.Context) {
+	urlStr := c.Query("url")
+	urlObj, err := url.Parse(urlStr)
+	if err != nil {
+		utils.AjaxError(c, 400, err)
+		return
+	}
+
+	if !utils.IsAllowedRedirectDomain(urlObj.Hostname()) {
+		utils.AjaxError(c, 400, errors.New("unknown hostname"))
+		return
+	}
+
+	resolved, err := api.GetRedirectTarget(urlStr)
+	if err != nil {
+		utils.AjaxError(c, 500, err)
+		return
+	}
+	utils.AjaxSuccess(c, resolved)
+}
+
+func getImage(c *gin.Context) {
+	urlName := c.Query("url")
+	referer := c.Query("referer")
+
+	// 请求检查
+	urlObj, err := url.Parse(urlName)
+	if err != nil {
+		utils.AjaxError(c, 400, err)
+		return
+	}
+
+	if !utils.IsAllowedImageDomain(urlObj.Hostname()) {
+		utils.AjaxError(c, 400, errors.New("unknown hostname"))
+		return
+	}
+
+	// 构建请求
+	log.Printf("Retriving resources from %s\n", urlName)
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", urlName, nil)
+	if err != nil {
+		log.Printf("Unable to initialize request: %s\n", err)
+		c.Status(500)
+		c.Abort()
+		return
+	}
+
+	// 设置请求头部
+	req.Header.Set("Referer", referer)
+	req.Header.Set("User-Agent", config.Global.MustString("request.userAgent"))
+
+	// 发出请求
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Unable to perform request: %s\n", err)
+		c.Status(500)
+		c.Abort()
+		return
+	}
+	defer resp.Body.Close()
+
+	c.Header("Content-Type", resp.Header.Get("Content-Type"))
+	c.Status(200)
 
 	// 数据传输
 	_, err = io.Copy(c.Writer, resp.Body)
