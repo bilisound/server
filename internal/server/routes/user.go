@@ -1,12 +1,16 @@
 package routes
 
 import (
+	"fmt"
 	"github.com/bilisound/server/internal/api"
 	"github.com/bilisound/server/internal/config"
 	"github.com/bilisound/server/internal/utils"
 	"github.com/gin-gonic/gin"
+	"io"
 	"log"
 	"net/http"
+	"net/url"
+	"strconv"
 )
 
 func InitRoute(engine *gin.Engine, prefix string) {
@@ -33,7 +37,7 @@ func getResource(c *gin.Context) {
 	id := c.Query("id")
 	episode := c.Query("episode")
 	dl := c.Query("dl")
-	_, playInfo, err := api.GetVideoMeta(id, episode)
+	initialState, playInfo, err := api.GetVideoMeta(id, episode)
 
 	if err != nil {
 		log.Printf("Unable to get resource info: %s\n", err)
@@ -42,6 +46,8 @@ func getResource(c *gin.Context) {
 		return
 	}
 
+	// 构建请求
+	log.Printf("Retriving resources from %s\n", playInfo.Url[0])
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", playInfo.Url[0], nil)
 	if err != nil {
@@ -51,7 +57,7 @@ func getResource(c *gin.Context) {
 		return
 	}
 
-	// Set headers
+	// 设置请求头部
 	rangeValue := c.GetHeader("Range")
 	httpCode := 200
 	if rangeValue != "" {
@@ -61,7 +67,7 @@ func getResource(c *gin.Context) {
 	req.Header.Set("Referer", "https://www.bilibili.com/video/"+id+"/?p="+episode)
 	req.Header.Set("User-Agent", config.Global.MustString("request.userAgent"))
 
-	// Send request
+	// 发出请求
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("Unable to perform request: %s\n", err)
@@ -71,16 +77,43 @@ func getResource(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 
-	// Build Response
-	// todo 区分视频和音频，并且正确设置 Content-Disposition 值
-	meta := "audio/mp4"
-	if dl == "1" {
-		c.Header("Content-Disposition", "filename*=utf-8''test.m4a")
-		meta = "application/octet-stream"
+	// 构建响应
+	if dl == "" {
+		if initialState.IsVideoOnly {
+			c.Header("Content-Type", "video/mp4")
+		} else {
+			c.Header("Content-Type", "audio/mp4")
+		}
+	} else {
+		// 构建文件名
+		fileName := "["
+		if dl == "av" {
+			fileName += "av" + strconv.FormatInt(initialState.Aid, 10)
+		} else {
+			fileName += initialState.Bvid
+		}
+		episodeNum, err := strconv.Atoi(episode)
+		if err != nil {
+			log.Printf("Unable to perform request: %s\n", err)
+			c.Status(500)
+			c.Abort()
+			return
+		}
+		fileName += "] [P" + episode + "] " + initialState.Pages[episodeNum-1].Part
+		if initialState.IsVideoOnly {
+			fileName += ".mp4"
+		} else {
+			fileName += ".m4a"
+		}
+
+		// 使用 RFC 5987 编码文件名
+		encodedFileName := url.PathEscape(fileName)
+		contentDisposition := fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", fileName, encodedFileName)
+		c.Header("Content-Disposition", contentDisposition)
+		c.Header("Content-Type", "application/octet-stream")
 	}
 	c.Header("Accept-Ranges", "bytes")
 	c.Header("Cache-Control", "max-age=604800")
-	c.Header("Content-Type", meta)
 	if rangeValue != "" {
 		c.Header("Content-Range", resp.Header.Get("Content-Range"))
 		c.Header("Content-Length", resp.Header.Get("Content-Length"))
@@ -88,18 +121,13 @@ func getResource(c *gin.Context) {
 
 	c.Status(httpCode)
 
-	// 缓冲区大小
-	buffer := make([]byte, 1024)
-	for {
-		n, err := resp.Body.Read(buffer)
-		if err != nil {
-			break
-		}
-		if n > 0 {
-			if _, err := c.Writer.Write(buffer[:n]); err != nil {
-				break
-			}
-		}
+	// 数据传输
+	defer resp.Body.Close()
+	_, err = io.Copy(c.Writer, resp.Body)
+	if err != nil {
+		log.Printf("Unable to perform request: %s\n", err)
+		c.Abort()
+		return
 	}
 }
 
