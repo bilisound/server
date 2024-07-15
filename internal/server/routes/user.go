@@ -5,7 +5,6 @@ import (
 	"github.com/bilisound/server/internal/config"
 	"github.com/bilisound/server/internal/utils"
 	"github.com/gin-gonic/gin"
-	"io"
 	"log"
 	"net/http"
 )
@@ -54,8 +53,10 @@ func getResource(c *gin.Context) {
 
 	// Set headers
 	rangeValue := c.GetHeader("Range")
+	httpCode := 200
 	if rangeValue != "" {
 		req.Header.Set("Range", c.GetHeader("Range"))
+		httpCode = 206
 	}
 	req.Header.Set("Referer", "https://www.bilibili.com/video/"+id+"/?p="+episode)
 	req.Header.Set("User-Agent", config.Global.MustString("request.userAgent"))
@@ -79,19 +80,27 @@ func getResource(c *gin.Context) {
 	}
 	c.Header("Accept-Ranges", "bytes")
 	c.Header("Cache-Control", "max-age=604800")
+	c.Header("Content-Type", meta)
 	if rangeValue != "" {
 		c.Header("Content-Range", resp.Header.Get("Content-Range"))
 		c.Header("Content-Length", resp.Header.Get("Content-Length"))
 	}
 
-	read, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("Unable to read bytes: %s\n", err)
-		c.Status(500)
-		c.Abort()
-		return
+	c.Status(httpCode)
+
+	// 缓冲区大小
+	buffer := make([]byte, 1024)
+	for {
+		n, err := resp.Body.Read(buffer)
+		if err != nil {
+			break
+		}
+		if n > 0 {
+			if _, err := c.Writer.Write(buffer[:n]); err != nil {
+				break
+			}
+		}
 	}
-	c.Data(200, meta, read)
 }
 
 func test(c *gin.Context) {
